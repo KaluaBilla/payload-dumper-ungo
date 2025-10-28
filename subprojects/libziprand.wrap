@@ -1,0 +1,11 @@
+[wrap-git]
+directory = libziprand
+url = https://github.com/rhythmcache/libziprand.git
+revision = head
+
+# optional: if you want to pin a specific commit or tag, replace "head" with it
+# e.g. revision = v1.0.0  or revision = 3f2a8c5
+
+# dependencies or default options (optional)
+# [provide]
+# libziprand = libziprand_dep
