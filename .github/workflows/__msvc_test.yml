@@ -1,0 +1,57 @@
+name: MSVC Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x86, x64]
+        include:
+          - arch: x86
+            msvc_arch: x86
+          - arch: x64
+            msvc_arch: x64
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install Meson and Ninja
+      run: |
+        pip install meson ninja
+
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ matrix.msvc_arch }}
+
+    - name: Configure with Meson
+      run: |
+        meson setup build -Denable_zip=true -Denable_http=false --buildtype=release --optimization=3
+      env:
+        CFLAGS: /O2 /Oi /Ot /GL /favor:INTEL64
+        CXXFLAGS: /O2 /Oi /Ot /GL /favor:INTEL64
+        LDFLAGS: /LTCG
+
+    - name: Build with Ninja
+      run: |
+        ninja -C build
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: payload-dumper-ungo-${{ matrix.arch }}
+        path: build/payload-dumper-ungo.exe
+        if-no-files-found: error
