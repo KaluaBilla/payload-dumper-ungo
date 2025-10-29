@@ -1,4 +1,5 @@
 #include "payload.hpp"
+#include "progress.hpp"
 
 #include <cstdint>
 #if defined(_MSC_VER)
@@ -37,69 +38,6 @@ static std::string formatBytes(uint64_t bytes)
     std::stringstream ss;
     ss << std::fixed << std::setprecision(2) << size << " " << units[unit_idx];
     return ss.str();
-}
-
-static std::mutex progress_mutex;
-static std::map<std::string, std::pair<int, int>> partition_progress;
-static std::vector<std::string> partition_order;
-
-static void
-initProgressTracking(const std::vector<const chromeos_update_engine::PartitionUpdate*>& partitions)
-{
-    std::lock_guard<std::mutex> lock(progress_mutex);
-    partition_progress.clear();
-    partition_order.clear();
-
-    for (const auto* p : partitions) {
-        std::string name = p->partition_name();
-        partition_progress[name] = {0, p->operations_size()};
-        partition_order.push_back(name);
-    }
-
-    // Print initial empty progress bars
-    for (const auto& name : partition_order) {
-        std::cout << "\n";
-    }
-}
-
-static void updateProgress(const std::string& partition_name, int completed, int total)
-{
-    std::lock_guard<std::mutex> lock(progress_mutex);
-    partition_progress[partition_name] = {completed, total};
-
-    // Move cursor up to the start of progress section
-    std::cout << "\033[" << partition_order.size() << "A";
-
-    // Print all progress bars
-    for (const auto& name : partition_order) {
-        auto [comp, tot] = partition_progress[name];
-        int percentage = tot > 0 ? (comp * 100) / tot : 0;
-
-        // Progress bar with 30 characters width
-        int bar_width = 30;
-        int filled = (bar_width * percentage) / 100;
-
-        std::cout << "\r[" << std::setw(15) << std::left << name << "] ";
-        for (int i = 0; i < bar_width; ++i) {
-            if (i < filled)
-                std::cout << "=";
-            else if (i == filled && percentage < 100)
-                std::cout << ">";
-            else
-                std::cout << " ";
-        }
-        std::cout << " " << std::setw(3) << std::right << percentage << "% (" 
-                  << comp << "/" << tot << ")";
-        std::cout << "\033[K\n";  // Clear to end of line and newline
-    }
-
-    std::cout << std::flush;
-}
-
-static void finalizeProgress()
-{
-    std::lock_guard<std::mutex> lock(progress_mutex);
-    std::cout << "\n";
 }
 
 bool Payload::isUrl(const std::string& path)
@@ -352,13 +290,13 @@ uint64_t Payload::getBytesDownloaded() const
 #endif
 
 bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& partition,
-                               const std::string& output_path)
+                               const std::string& output_path,
+                               ProgressTracker* progress_tracker)
 {
     std::string name = partition.partition_name();
 
     std::ofstream output(output_path, std::ios::binary);
     if (!output.is_open()) {
-        std::lock_guard<std::mutex> lock(progress_mutex);
         std::cerr << "\nFailed to create output file: " << output_path << "\n";
         return false;
     }
@@ -366,11 +304,12 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
     int total_ops = partition.operations_size();
     int completed_ops = 0;
 
-    updateProgress(name, 0, total_ops);
+    if (progress_tracker) {
+        progress_tracker->update(name, 0, total_ops);
+    }
 
     for (const auto& operation : partition.operations()) {
         if (operation.dst_extents_size() == 0) {
-            std::lock_guard<std::mutex> lock(progress_mutex);
             std::cerr << "\nInvalid operation for " << name << "\n";
             return false;
         }
@@ -383,7 +322,6 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
 
         std::vector<uint8_t> compressed_data(data_length);
         if (readBytes(compressed_data.data(), data_offset, data_length) != data_length) {
-            std::lock_guard<std::mutex> lock(progress_mutex);
             std::cerr << "\nFailed to read data for " << name << "\n";
             return false;
         }
@@ -401,7 +339,6 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
             lzma_stream strm = LZMA_STREAM_INIT;
             lzma_ret ret = lzma_stream_decoder(&strm, UINT64_MAX, 0);
             if (ret != LZMA_OK) {
-                std::lock_guard<std::mutex> lock(progress_mutex);
                 std::cerr << "\nXZ decoder init failed for " << name << "\n";
                 return false;
             }
@@ -414,7 +351,6 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
             ret = lzma_code(&strm, LZMA_FINISH);
             lzma_end(&strm);
             if (ret != LZMA_STREAM_END) {
-                std::lock_guard<std::mutex> lock(progress_mutex);
                 std::cerr << "\nXZ decompression failed for " << name << "\n";
                 return false;
             }
@@ -431,7 +367,6 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
                                                  0,
                                                  0);
             if (ret != BZ_OK) {
-                std::lock_guard<std::mutex> lock(progress_mutex);
                 std::cerr << "\nBZ2 decompression failed for " << name << "\n";
                 return false;
             }
@@ -447,7 +382,6 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
                                          compressed_data.data(),
                                          compressed_data.size());
             if (ZSTD_isError(ret)) {
-                std::lock_guard<std::mutex> lock(progress_mutex);
                 std::cerr << "\nZSTD decompression failed for " << name << "\n";
                 return false;
             }
@@ -460,13 +394,11 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
         }
 
         default:
-            std::lock_guard<std::mutex> lock(progress_mutex);
             std::cerr << "\nUnhandled operation type for " << name << "\n";
             return false;
         }
 
         if (decompressed_data.size() != static_cast<size_t>(expected_size)) {
-            std::lock_guard<std::mutex> lock(progress_mutex);
             std::cerr << "\nSize mismatch for " << name << "\n";
             return false;
         }
@@ -475,12 +407,15 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
 
         completed_ops++;
 
-        if (completed_ops == total_ops || (completed_ops % (total_ops / 20 + 1)) == 0) {
-            updateProgress(name, completed_ops, total_ops);
+        if (progress_tracker &&
+            (completed_ops == total_ops || (completed_ops % (total_ops / 20 + 1)) == 0)) {
+            progress_tracker->update(name, completed_ops, total_ops);
         }
     }
 
-    updateProgress(name, total_ops, total_ops);
+    if (progress_tracker) {
+        progress_tracker->update(name, total_ops, total_ops);
+    }
 
     return true;
 }
@@ -514,7 +449,17 @@ bool Payload::extractSelected(const std::string& target_dir,
 
     std::cout << "\nExtracting " << to_extract.size() << " partition(s)...\n";
 
-    initProgressTracking(to_extract);
+    // Initialize progress tracker
+    ProgressTracker progress_tracker;
+    std::vector<std::string> partition_names;
+    std::vector<int> operation_counts;
+    
+    for (const auto* p : to_extract) {
+        partition_names.push_back(p->partition_name());
+        operation_counts.push_back(p->operations_size());
+    }
+    
+    progress_tracker.init(partition_names, operation_counts);
 
     std::queue<const chromeos_update_engine::PartitionUpdate*> work_queue;
     for (auto* p : to_extract) {
@@ -536,7 +481,7 @@ bool Payload::extractSelected(const std::string& target_dir,
             }
 
             std::string output_path = target_dir + "/" + partition->partition_name() + ".img";
-            if (!extractPartition(*partition, output_path)) {
+            if (!extractPartition(*partition, output_path, &progress_tracker)) {
                 error_occurred = true;
             }
         }
@@ -551,7 +496,7 @@ bool Payload::extractSelected(const std::string& target_dir,
         t.join();
     }
 
-    finalizeProgress();
+    progress_tracker.finalize();
 
 #ifdef HTTP_SUPPORT
     if (is_http_) {

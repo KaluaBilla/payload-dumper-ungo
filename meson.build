@@ -107,6 +107,7 @@ endif
 sources = [
   'src/main.cc',
   'src/payload.cc',
+  'src/progress.cc',
   proto_src
 ]
 

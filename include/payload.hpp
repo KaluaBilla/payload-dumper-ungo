@@ -26,6 +26,9 @@ extern "C" {
 namespace payload_dumper
 {
 
+// Forward declaration
+class ProgressTracker;
+
 constexpr const char* PAYLOAD_MAGIC = "CrAU";
 constexpr uint64_t BRILLO_MAJOR_VERSION = 2;
 constexpr uint64_t BLOCK_SIZE = 4096;
@@ -80,7 +83,8 @@ class Payload
     bool readManifest();
     bool readMetadataSignature();
     bool extractPartition(const chromeos_update_engine::PartitionUpdate& partition,
-                          const std::string& output_path);
+                          const std::string& output_path,
+                          ProgressTracker* progress_tracker);
 
     int64_t readBytes(void* buffer, int64_t offset, int64_t length);
 
