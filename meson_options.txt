@@ -1,2 +1,5 @@
+option('build_static', type: 'boolean', value: false, description: 'Force static linking if supported')
+
 option('enable_zip', type: 'boolean', value: false, description: 'Enable ZIP support')
+
 option('enable_http', type: 'boolean', value: true, description: 'Enable HTTP/network support (requires libcurl)')
