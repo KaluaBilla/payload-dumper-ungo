@@ -5,6 +5,29 @@ project('payload-dumper-ungo', ['c', 'cpp'],
 
 add_project_arguments('-DNDEBUG', language: ['c', 'cpp'])
 
+# --- Optional static build ---
+build_static = get_option('build_static')
+
+if build_static
+  message('Checking for static link support...')
+  cc = meson.get_compiler('c')
+
+  test_code = '''
+  int main(void) { return 0; }
+  '''
+
+  # Try to compile a small static program
+  can_static = cc.links(test_code, args: ['-static'], name: 'static link test')
+
+  if can_static
+    message('Static linking supported, enabling -static.')
+    add_project_link_arguments('-static', language: ['c', 'cpp'])
+  else
+    message('Static linking not supported, proceeding normally.')
+  endif
+endif
+
+
 # --- Compression Libraries ---
 lzma_dep = dependency('liblzma', required: false)
 if not lzma_dep.found()
@@ -18,8 +41,12 @@ endif
 
 bz2_dep = dependency('bzip2', required: false)
 if not bz2_dep.found()
-  bz2_dep = dependency('bzip2', fallback: ['bzip2', 'bzip2_dep'], default_options: ['default_library=static'])
+  bz2_dep = dependency('bz2', required: false)
 endif
+if not bz2_dep.found()
+  bz2_dep = dependency('bz2', fallback: ['bzip2', 'bzip2_dep'], default_options: ['default_library=static'])
+endif
+
 
 protobuf_dep = dependency('libprotobuf', required: false)
 if not protobuf_dep.found()
