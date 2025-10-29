@@ -20,9 +20,9 @@ An Android OTA payload dumper **not** written in Go.
 ## Build Dependencies
 
 **Required:**
-- `lzma` - LZMA compression support
-- `bzip2` - Bzip2 compression support
-- `zstd` - Zstandard compression support
+- `lzma` - LZMA decompression support
+- `bzip2` - Bzip2 decompression support
+- `zstd` - Zstandard decompression support
 - `protobuf` - Protocol buffers
 
 **Optional:**
