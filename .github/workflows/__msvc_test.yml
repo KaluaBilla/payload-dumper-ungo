@@ -2,22 +2,27 @@ name: MSVC Build
 
 on:
   push:
-    branches: [main]
+    branches: [ main, master ]
   pull_request:
-    branches: [main]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 30
     strategy:
       matrix:
         arch: [x86, x64]
         include:
           - arch: x86
             msvc_arch: x86
+            cflags: /O2 /Oi /Ot /GL /MT
+            cxxflags: /O2 /Oi /Ot /GL /MT
           - arch: x64
             msvc_arch: x64
+            cflags: /O2 /Oi /Ot /GL /MT /favor:INTEL64
+            cxxflags: /O2 /Oi /Ot /GL /MT /favor:INTEL64
     
     steps:
     - name: Checkout repository
@@ -41,8 +46,8 @@ jobs:
       run: |
         meson setup build -Denable_zip=true -Denable_http=false --buildtype=release --optimization=3
       env:
-        CFLAGS: /O2 /Oi /Ot /GL /favor:INTEL64
-        CXXFLAGS: /O2 /Oi /Ot /GL /favor:INTEL64
+        CFLAGS: ${{ matrix.cflags }}
+        CXXFLAGS: ${{ matrix.cxxflags }}
         LDFLAGS: /LTCG
 
     - name: Build with Ninja
