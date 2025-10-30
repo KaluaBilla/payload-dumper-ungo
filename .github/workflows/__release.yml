@@ -1,0 +1,267 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [riscv64, x86, x86_64, aarch64, armv7]
+      fail-fast: false
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    
+    - name: Install Meson and Ninja
+      run: |
+        pip install meson ninja
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          pkg-config \
+          git
+    
+    - name: Install cross-compilers
+      run: |
+        case "${{ matrix.arch }}" in
+          riscv64)
+            sudo apt-get install -y gcc-riscv64-linux-gnu g++-riscv64-linux-gnu
+            ;;
+          x86)
+            sudo apt-get install -y gcc-i686-linux-gnu g++-i686-linux-gnu
+            ;;
+          x86_64)
+            sudo apt-get install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu || true
+            ;;
+          aarch64)
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+            ;;
+          armv7)
+            sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+            ;;
+        esac
+    
+    - name: Make scripts executable
+      run: |
+        chmod +x .github/linux_build.sh
+        chmod +x .github/linux_builder.sh
+    
+    - name: Build for ${{ matrix.arch }}
+      run: |
+        cd .github
+        ./linux_build.sh ${{ matrix.arch }}
+    
+    - name: Find, strip and prepare binary
+      run: |
+        BINARY_PATH=$(find .github/build/${{ matrix.arch }}/prefix -name "payload-dumper-ungo" -o -name "payload_dumper_ungo" | head -n 1)
+        if [ -z "$BINARY_PATH" ]; then
+          echo "Binary not found!"
+          exit 1
+        fi
+        
+        # Strip the binary
+        case "${{ matrix.arch }}" in
+          riscv64)
+            riscv64-linux-gnu-strip "$BINARY_PATH" || llvm-strip "$BINARY_PATH" || true
+            ;;
+          x86)
+            i686-linux-gnu-strip "$BINARY_PATH" || llvm-strip "$BINARY_PATH" || true
+            ;;
+          x86_64)
+            strip "$BINARY_PATH"
+            ;;
+          aarch64)
+            aarch64-linux-gnu-strip "$BINARY_PATH" || llvm-strip "$BINARY_PATH" || true
+            ;;
+          armv7)
+            arm-linux-gnueabihf-strip "$BINARY_PATH" || llvm-strip "$BINARY_PATH" || true
+            ;;
+        esac
+        
+        mkdir -p artifacts
+        cp "$BINARY_PATH" artifacts/payload-dumper-ungo
+        cd artifacts
+        zip payload-dumper-ungo-linux-static-${{ matrix.arch }}.zip payload-dumper-ungo
+        rm payload-dumper-ungo
+        echo "Binary found at: $BINARY_PATH"
+        ls -lh
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-${{ matrix.arch }}
+        path: artifacts/*.zip
+        retention-days: 1
+
+  build-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x86_64, arm64]
+        include:
+          - arch: x86_64
+            cflags: -O3 -arch x86_64
+            cxxflags: -O3 -arch x86_64
+            ldflags: -arch x86_64
+          - arch: arm64
+            cflags: -O3 -arch arm64
+            cxxflags: -O3 -arch arm64
+            ldflags: -arch arm64
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install Meson and Ninja
+      run: |
+        pip install meson ninja
+
+    - name: Configure with Meson
+      run: |
+        meson setup build -Denable_zip=true -Denable_http=false -Dbuild_static=true -Dzstd:lz4=disabled -Dzstd:zlib=disabled -Dzstd:lzma=disabled -Dwrap_mode=forcefallback --buildtype=release --optimization=3
+      env:
+        CFLAGS: ${{ matrix.cflags }}
+        CXXFLAGS: ${{ matrix.cxxflags }}
+        LDFLAGS: ${{ matrix.ldflags }} -Wl,-dead_strip
+
+    - name: Build with Ninja
+      run: |
+        ninja -C build
+
+    - name: Prepare artifact
+      run: |
+        strip build/payload-dumper-ungo
+        mkdir -p artifacts
+        cp build/payload-dumper-ungo artifacts/
+        cd artifacts
+        zip payload-dumper-ungo-macos-${{ matrix.arch }}.zip payload-dumper-ungo
+        rm payload-dumper-ungo
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-${{ matrix.arch }}
+        path: artifacts/*.zip
+        retention-days: 1
+
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x86, x64]
+        include:
+          - arch: x86
+            msvc_arch: x86
+            cflags: /O2 /Oi /Ot /GL /MT
+            cxxflags: /O2 /Oi /Ot /GL /MT
+          - arch: x64
+            msvc_arch: x64
+            cflags: /O2 /Oi /Ot /GL /MT /favor:INTEL64
+            cxxflags: /O2 /Oi /Ot /GL /MT /favor:INTEL64
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install Meson and Ninja
+      run: |
+        pip install meson ninja
+
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ matrix.msvc_arch }}
+
+    - name: Configure with Meson
+      run: |
+        meson setup build -Denable_zip=true -Denable_http=false --buildtype=release --optimization=3
+      env:
+        CFLAGS: ${{ matrix.cflags }}
+        CXXFLAGS: ${{ matrix.cxxflags }}
+        LDFLAGS: /LTCG
+
+    - name: Build with Ninja
+      run: |
+        ninja -C build
+
+    - name: Prepare artifact
+      run: |
+        mkdir artifacts
+        copy build\payload-dumper-ungo.exe artifacts\
+        cd artifacts
+        tar -a -c -f payload-dumper-ungo-windows-${{ matrix.arch }}.zip payload-dumper-ungo.exe
+        del payload-dumper-ungo.exe
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-${{ matrix.arch }}
+        path: artifacts/*.zip
+        retention-days: 1
+
+  release:
+    needs: [build-linux, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: true
+
+    - name: Display structure
+      run: |
+        ls -R artifacts/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        body: |
+          ## Payload Dumper Build
+          
+          **Note:** Network extraction support is disabled because building libcurl requires a lot of dependencies.
+          
+          ### Downloads
+          - **Linux**: Static binaries for multiple architectures
+          - **macOS**: Universal binaries for x86_64 and ARM64
+          - **Windows**: Binaries for x86 and x64
+          
+          Extract the zip file to get the `payload-dumper-ungo` executable.
+        files: |
+          artifacts/*.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
