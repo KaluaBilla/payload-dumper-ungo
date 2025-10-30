@@ -29,7 +29,6 @@ Payload-dumper-ungo demonstrates significant performance improvements over other
 | **payload-dumper-ungo** | **raw** | 67.389 ± 0.170 | **1.00** (fastest) |
 | payload-dumper-go | raw | 77.468 ± 0.120 | 1.15 |
 | payload-dumper-rust | raw | 82.705 ± 0.135 | 1.23 |
-
 | **payload-dumper-ungo** | **zip** | 67.066 ± 0.702 | **1.00** (fastest) |
 | payload-dumper-go | zip | 81.037 ± 0.805 | 1.21 |
 | payload-dumper-rust | zip | 83.472 ± 1.426 | 1.24 |
