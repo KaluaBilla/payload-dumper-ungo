@@ -76,9 +76,6 @@ Payload::~Payload()
     if (zip_archive_) {
         ziprand_close(zip_archive_);
     }
-    if (zip_io_) {
-        ziprand_io_free(zip_io_);
-    }
 #endif
     if (file_.is_open()) {
         file_.close();
