@@ -4,69 +4,50 @@ An Android OTA payload dumper **not** written in Go.
 
 ## Features
 
--  Fast extraction of Android OTA payload.bin files
--  Direct URL dumping - Extract payloads directly from remote URLs
--  Smart ZIP handling - Random access extraction from ZIP files without extracting payload.bin first
--  Compatible interface with the original payload-dumper-go
+- **Fast extraction** of Android OTA payload.bin files
+- **Direct URL dumping** - Extract payloads directly from remote URLs
+- **Smart ZIP handling** - Random access extraction from ZIP files without extracting payload.bin first
+- **Compatible interface** with the original payload-dumper-go
 
-## Difference from original
+## Key Differences from Original
 
-- Written in C and C++
+- Written in C and C++ for better performance
 - **Direct URL support**: Extract OTA payloads directly from URLs using libcurl
 - **Random access ZIP extraction**: Process ZIP files efficiently without intermediate extraction
-- **Default number of concurrent extraction** = Number of cpu cores
+- **Default number of concurrent extraction** = Number of CPU cores
+
 ---
 
 # Performance Comparison
-- Payload-dumper-ungo is extremely Fast
 
-# Payload Dumper Performance Comparison
+Payload-dumper-ungo demonstrates significant performance improvements over other implementations:
 
-## benchmark-payload-dumper-go-raw
+## Benchmark Results
 
-| Command | Mean [s] | Min [s] | Max [s] | Relative |
-|:---|---:|---:|---:|---:|
-| `payload-dumper-go --concurrency 4 -o ../output_raw payload.bin` | 77.468 ± 0.120 | 77.361 | 77.598 | 1.00 |
+| Tool | Input Type | Mean Time [s] | Relative Performance |
+|------|------------|---------------|---------------------|
+| **payload-dumper-ungo** | **raw** | 67.389 ± 0.170 | **1.00** (fastest) |
+| payload-dumper-go | raw | 77.468 ± 0.120 | 1.15 |
+| payload-dumper-rust | raw | 82.705 ± 0.135 | 1.23 |
 
-## benchmark-payload-dumper-go-zip
+| **payload-dumper-ungo** | **zip** | 67.066 ± 0.702 | **1.00** (fastest) |
+| payload-dumper-go | zip | 81.037 ± 0.805 | 1.21 |
+| payload-dumper-rust | zip | 83.472 ± 1.426 | 1.24 |
 
-| Command | Mean [s] | Min [s] | Max [s] | Relative |
-|:---|---:|---:|---:|---:|
-| `payload-dumper-go --concurrency 4 -o ../output_zip ota.zip` | 81.037 ± 0.805 | 80.483 | 81.961 | 1.00 |
-
-## benchmark-payload-dumper-rust-raw
-
-| Command | Mean [s] | Min [s] | Max [s] | Relative |
-|:---|---:|---:|---:|---:|
-| `payload_dumper --threads 4 --no-verify -o ../output_raw payload.bin` | 82.705 ± 0.135 | 82.608 | 82.860 | 1.00 |
-
-## benchmark-payload-dumper-rust-zip
-
-| Command | Mean [s] | Min [s] | Max [s] | Relative |
-|:---|---:|---:|---:|---:|
-| `payload_dumper --threads 4 --no-verify -o ../output_zip ota.zip` | 83.472 ± 1.426 | 81.986 | 84.829 | 1.00 |
-
-## benchmark-payload-dumper-ungo-raw
-
-| Command | Mean [s] | Min [s] | Max [s] | Relative |
-|:---|---:|---:|---:|---:|
-| `payload-dumper-ungo --concurrency 4 -o ../output_raw payload.bin` | 67.389 ± 0.170 | 67.273 | 67.585 | 1.00 |
-
-## benchmark-payload-dumper-ungo-zip
-
-| Command | Mean [s] | Min [s] | Max [s] | Relative |
-|:---|---:|---:|---:|---:|
-| `payload-dumper-ungo --concurrency 4 -o ../output_zip ota.zip` | 67.066 ± 0.702 | 66.546 | 67.865 | 1.00 |
+**Note:** 
+- **raw** = A raw payload.bin file was supplied
+- **zip** = A payload.bin inside a ZIP archive was supplied
+- All tests performed with 4 concurrent threads
 
 ---
 
-# How to Build ?
+# How to Build
 
 ## Build Dependencies
 
 **Required:**
 - `lzma` - LZMA decompression support
-- `bzip2` - Bzip2 decompression support
+- `bzip2` - Bzip2 decompression support  
 - `zstd` - Zstandard decompression support
 - `protobuf` - Protocol buffers
 
