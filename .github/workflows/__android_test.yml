@@ -1,0 +1,118 @@
+name: __android_test
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [armeabi-v7a, arm64-v8a, x86, x86_64]
+        include:
+          - arch: armeabi-v7a
+            abi: armeabi-v7a
+            target: armv7a-linux-androideabi
+            api: 21
+            cflags: -O3 -fPIC -flto -march=armv7-a -mfpu=neon -mfloat-abi=softfp -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
+            ldflags: -O3 -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,--hash-style=gnu
+          - arch: arm64-v8a
+            abi: arm64-v8a
+            target: aarch64-linux-android
+            api: 21
+            cflags: -O3 -fPIC -flto -march=armv8-a+crypto -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
+            ldflags: -O3 -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,--hash-style=gnu
+          - arch: x86
+            abi: x86
+            target: i686-linux-android
+            api: 21
+            cflags: -O3 -fPIC -flto -march=i686 -mtune=intel -msse4.2 -mpopcnt -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
+            ldflags: -O3 -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,--hash-style=gnu
+          - arch: x86_64
+            abi: x86_64
+            target: x86_64-linux-android
+            api: 21
+            cflags: -O3 -fPIC -flto -march=x86-64 -mtune=intel -msse4.2 -mpopcnt -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
+            ldflags: -O3 -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,--hash-style=gnu
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install Meson and Ninja
+      run: |
+        pip install meson ninja
+
+    - name: Setup Android NDK
+      uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: r29
+        add-to-path: true
+        local-cache: true
+
+    - name: Create Meson cross file
+      run: |
+        cat > android-${{ matrix.arch }}.txt << EOF
+        [binaries]
+        c = '${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}${{ matrix.api }}-clang'
+        cpp = '${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}${{ matrix.api }}-clang++'
+        ar = '${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+        strip = '${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+        
+        [properties]
+        sys_root = '${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
+        
+        [host_machine]
+        system = 'android'
+        cpu_family = '${{ matrix.arch == 'armeabi-v7a' && 'arm' || (matrix.arch == 'arm64-v8a' && 'aarch64' || matrix.arch) }}'
+        cpu = '${{ matrix.arch == 'armeabi-v7a' && 'armv7a' || (matrix.arch == 'arm64-v8a' && 'armv8' || matrix.arch) }}'
+        endian = 'little'
+        EOF
+
+    - name: Configure with Meson
+      run: |
+        meson setup build \
+          --cross-file=android-${{ matrix.arch }}.txt \
+          -Denable_zip=true \
+          -Denable_http=false \
+          -Dzstd:lz4=disabled \
+          -Dzstd:zlib=disabled \
+          -Dzstd:lzma=disabled \
+          -Dwrap_mode=forcefallback \
+          --buildtype=release \
+          --optimization=3 \
+          -Db_lto=true \
+          -Db_ndebug=true
+      env:
+        CFLAGS: ${{ matrix.cflags }}
+        CXXFLAGS: ${{ matrix.cflags }}
+        LDFLAGS: ${{ matrix.ldflags }}
+
+    - name: Build with Ninja
+      run: |
+        ninja -C build
+
+    - name: Strip binary
+      run: |
+        ${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip build/payload-dumper-ungo
+
+    - name: Verify binary
+      run: |
+        llvm-strip/payload-dumper-ungo || true
+        file build/payload-dumper-ungo
+        ls -lh build/payload-dumper-ungo
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: payload-dumper-ungo-android-${{ matrix.arch }}
+        path: build/payload-dumper-ungo
+        if-no-files-found: error
