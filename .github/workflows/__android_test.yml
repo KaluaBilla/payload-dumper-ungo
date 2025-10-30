@@ -1,4 +1,4 @@
-name: __android_test
+name: Android NDK Build
 
 on:
   pull_request:
@@ -16,25 +16,25 @@ jobs:
           - arch: armeabi-v7a
             abi: armeabi-v7a
             target: armv7a-linux-androideabi
-            api: 21
+            api: 24
             cflags: -O3 -fPIC -flto -march=armv7-a -mfpu=neon -mfloat-abi=softfp -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
             ldflags: -O3 -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,--hash-style=gnu
           - arch: arm64-v8a
             abi: arm64-v8a
             target: aarch64-linux-android
-            api: 21
+            api: 24
             cflags: -O3 -fPIC -flto -march=armv8-a+crypto -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
             ldflags: -O3 -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,--hash-style=gnu
           - arch: x86
             abi: x86
             target: i686-linux-android
-            api: 21
+            api: 24
             cflags: -O3 -fPIC -flto -march=i686 -mtune=intel -msse4.2 -mpopcnt -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
             ldflags: -O3 -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,--hash-style=gnu
           - arch: x86_64
             abi: x86_64
             target: x86_64-linux-android
-            api: 21
+            api: 24
             cflags: -O3 -fPIC -flto -march=x86-64 -mtune=intel -msse4.2 -mpopcnt -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
             ldflags: -O3 -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,--hash-style=gnu
     
@@ -60,15 +60,16 @@ jobs:
 
     - name: Create Meson cross file
       run: |
+        NDK_PATH="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-${ANDROID_NDK}}}"
         cat > android-${{ matrix.arch }}.txt << EOF
         [binaries]
-        c = '${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}${{ matrix.api }}-clang'
-        cpp = '${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}${{ matrix.api }}-clang++'
-        ar = '${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-        strip = '${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+        c = '${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}${{ matrix.api }}-clang'
+        cpp = '${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.target }}${{ matrix.api }}-clang++'
+        ar = '${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+        strip = '${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
         
         [properties]
-        sys_root = '${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
+        sys_root = '${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
         
         [host_machine]
         system = 'android'
@@ -76,6 +77,8 @@ jobs:
         cpu = '${{ matrix.arch == 'armeabi-v7a' && 'armv7a' || (matrix.arch == 'arm64-v8a' && 'armv8' || matrix.arch) }}'
         endian = 'little'
         EOF
+        echo "Generated cross file for ${{ matrix.arch }}:"
+        cat android-${{ matrix.arch }}.txt
 
     - name: Configure with Meson
       run: |
@@ -83,6 +86,7 @@ jobs:
           --cross-file=android-${{ matrix.arch }}.txt \
           -Denable_zip=true \
           -Denable_http=false \
+          -Dbuild_static=true \
           -Dzstd:lz4=disabled \
           -Dzstd:zlib=disabled \
           -Dzstd:lzma=disabled \
@@ -102,11 +106,11 @@ jobs:
 
     - name: Strip binary
       run: |
-        ${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip build/payload-dumper-ungo
+        NDK_PATH="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-${ANDROID_NDK}}}"
+        ${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip build/payload-dumper-ungo
 
     - name: Verify binary
       run: |
-        llvm-strip/payload-dumper-ungo || true
         file build/payload-dumper-ungo
         ls -lh build/payload-dumper-ungo
 
