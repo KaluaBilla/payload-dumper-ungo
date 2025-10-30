@@ -15,7 +15,52 @@ An Android OTA payload dumper **not** written in Go.
 - **Direct URL support**: Extract OTA payloads directly from URLs using libcurl
 - **Random access ZIP extraction**: Process ZIP files efficiently without intermediate extraction
 - **Default number of concurrent extraction** = Number of cpu cores
+---
 
+# Performance Comparison
+- Payload-dumper-ungo is extremely Fast
+
+# Payload Dumper Performance Comparison
+
+## benchmark-payload-dumper-go-raw
+
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `payload-dumper-go --concurrency 4 -o ../output_raw payload.bin` | 77.468 ± 0.120 | 77.361 | 77.598 | 1.00 |
+
+## benchmark-payload-dumper-go-zip
+
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `payload-dumper-go --concurrency 4 -o ../output_zip ota.zip` | 81.037 ± 0.805 | 80.483 | 81.961 | 1.00 |
+
+## benchmark-payload-dumper-rust-raw
+
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `payload_dumper --threads 4 --no-verify -o ../output_raw payload.bin` | 82.705 ± 0.135 | 82.608 | 82.860 | 1.00 |
+
+## benchmark-payload-dumper-rust-zip
+
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `payload_dumper --threads 4 --no-verify -o ../output_zip ota.zip` | 83.472 ± 1.426 | 81.986 | 84.829 | 1.00 |
+
+## benchmark-payload-dumper-ungo-raw
+
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `payload-dumper-ungo --concurrency 4 -o ../output_raw payload.bin` | 67.389 ± 0.170 | 67.273 | 67.585 | 1.00 |
+
+## benchmark-payload-dumper-ungo-zip
+
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `payload-dumper-ungo --concurrency 4 -o ../output_zip ota.zip` | 67.066 ± 0.702 | 66.546 | 67.865 | 1.00 |
+
+---
+
+# How to Build ?
 
 ## Build Dependencies
 
