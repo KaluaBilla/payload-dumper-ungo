@@ -49,7 +49,7 @@ jobs:
 
     - name: Verify architecture
       run: |
-        llvm-strip build/payload-dumper-ungo
+        strip build/payload-dumper-ungo
         file build/payload-dumper-ungo
         lipo -info build/payload-dumper-ungo
 
