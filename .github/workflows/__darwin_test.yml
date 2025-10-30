@@ -37,7 +37,7 @@ jobs:
 
     - name: Configure with Meson
       run: |
-        meson setup build -Denable_zip=true -Denable_http=false -Dbuild_static=true -Dwrap_mode=forcefallback --buildtype=release --optimization=3
+        meson setup build -Denable_zip=true -Denable_http=false -Dbuild_static=true -Dzstd:lz4=disabled -Dzstd:zlib=disabled -Dzstd:lzma=disabled -Dwrap_mode=forcefallback --buildtype=release --optimization=3
       env:
         CFLAGS: ${{ matrix.cflags }}
         CXXFLAGS: ${{ matrix.cxxflags }}
