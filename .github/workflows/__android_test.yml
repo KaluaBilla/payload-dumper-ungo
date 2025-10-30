@@ -17,25 +17,25 @@ jobs:
             abi: armeabi-v7a
             target: armv7a-linux-androideabi
             api: 24
-            cflags: -O3 -fPIC -flto -march=armv7-a -mfpu=neon -mfloat-abi=softfp -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
+            cflags: -O3 -fPIC -flto -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
             ldflags: -O3 -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,--hash-style=gnu
           - arch: arm64-v8a
             abi: arm64-v8a
             target: aarch64-linux-android
             api: 24
-            cflags: -O3 -fPIC -flto -march=armv8-a+crypto -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
+            cflags: -O3 -fPIC -flto -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
             ldflags: -O3 -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,--hash-style=gnu
           - arch: x86
             abi: x86
             target: i686-linux-android
             api: 24
-            cflags: -O3 -fPIC -flto -march=i686 -mtune=intel -msse4.2 -mpopcnt -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
+            cflags: -O3 -fPIC -flto -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
             ldflags: -O3 -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,--hash-style=gnu
           - arch: x86_64
             abi: x86_64
             target: x86_64-linux-android
             api: 24
-            cflags: -O3 -fPIC -flto -march=x86-64 -mtune=intel -msse4.2 -mpopcnt -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
+            cflags: -O3 -fPIC -flto -ffunction-sections -fdata-sections -fvisibility=hidden -fomit-frame-pointer
             ldflags: -O3 -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,--hash-style=gnu
     
     steps:
@@ -86,7 +86,6 @@ jobs:
           --cross-file=android-${{ matrix.arch }}.txt \
           -Denable_zip=true \
           -Denable_http=false \
-          -Dbuild_static=true \
           -Dzstd:lz4=disabled \
           -Dzstd:zlib=disabled \
           -Dzstd:lzma=disabled \
