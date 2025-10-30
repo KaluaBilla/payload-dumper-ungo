@@ -1,8 +1,6 @@
 name: macOS Build
 
 on:
-  push:
-    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
@@ -39,7 +37,7 @@ jobs:
 
     - name: Configure with Meson
       run: |
-        meson setup build -Denable_zip=true -Denable_http=false --buildtype=release --optimization=3
+        meson setup build -Denable_zip=true -Denable_http=false -Dbuild_static=true -Dwrap_mode=forcefallback --buildtype=release --optimization=3
       env:
         CFLAGS: ${{ matrix.cflags }}
         CXXFLAGS: ${{ matrix.cxxflags }}
