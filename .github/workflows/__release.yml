@@ -233,6 +233,21 @@ jobs:
       contents: write
     
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Generate tag name
+      id: tag
+      run: |
+        if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          echo "tag_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+        else
+          TAG_NAME="build-$(date +'%Y%m%d-%H%M%S')-$(git rev-parse --short HEAD)"
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+        fi
+
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
@@ -246,8 +261,8 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ github.ref_name }}
-        name: Release ${{ github.ref_name }}
+        tag_name: ${{ steps.tag.outputs.tag_name }}
+        name: Release ${{ steps.tag.outputs.tag_name }}
         body: |
           ## Payload Dumper Build
           
