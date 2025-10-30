@@ -1,0 +1,85 @@
+name: Build Payload Dumper
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [riscv64, x86, x86_64, aarch64, armv7]
+      fail-fast: false
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    
+    - name: Install Meson and Ninja
+      run: |
+        pip install meson ninja
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          pkg-config \
+          git
+    
+    - name: Install cross-compilers
+      run: |
+        case "${{ matrix.arch }}" in
+          riscv64)
+            sudo apt-get install -y gcc-riscv64-linux-gnu g++-riscv64-linux-gnu
+            ;;
+          x86)
+            sudo apt-get install -y gcc-i686-linux-gnu g++-i686-linux-gnu
+            ;;
+          x86_64)
+            sudo apt-get install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu || true
+            ;;
+          aarch64)
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+            ;;
+          armv7)
+            sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+            ;;
+        esac
+    
+    - name: Make scripts executable
+      run: |
+        chmod +x .github/linux_build.sh
+        chmod +x .github/linux_builder.sh
+    
+    - name: Build for ${{ matrix.arch }}
+      run: |
+        cd .github
+        ./linux_build.sh ${{ matrix.arch }}
+    
+    - name: Find and prepare binary
+      run: |
+        BINARY_PATH=$(find .github/build/${{ matrix.arch }}/prefix -name "payload-dumper-ungo" -o -name "payload_dumper_ungo" | head -n 1)
+        if [ -z "$BINARY_PATH" ]; then
+          echo "Binary not found!"
+          exit 1
+        fi
+        mkdir -p artifacts
+        cp "$BINARY_PATH" artifacts/payload-dumper-ungo-${{ matrix.arch }}
+        echo "Binary found at: $BINARY_PATH"
+        ls -lh artifacts/
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: payload-dumper-ungo-${{ matrix.arch }}
+        path: artifacts/payload-dumper-ungo-${{ matrix.arch }}
+        retention-days: 30
