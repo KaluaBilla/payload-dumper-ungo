@@ -1,0 +1,72 @@
+name: macOS Build
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x86_64, arm64]
+        include:
+          - arch: x86_64
+            cflags: -O3 -march=x86-64 -mtune=intel
+            cxxflags: -O3 -march=x86-64 -mtune=intel
+            meson_args: --cross-file=cross-x86_64.txt
+          - arch: arm64
+            cflags: -O3 -mcpu=apple-m1
+            cxxflags: -O3 -mcpu=apple-m1
+            meson_args: ""
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install Meson and Ninja
+      run: |
+        pip install meson ninja
+
+    - name: Create cross-compilation file for x86_64
+      if: matrix.arch == 'x86_64'
+      run: |
+        cat > cross-x86_64.txt << EOF
+        [binaries]
+        c = ['clang', '-arch', 'x86_64']
+        cpp = ['clang++', '-arch', 'x86_64']
+        ar = 'ar'
+        strip = 'strip'
+
+        [host_machine]
+        system = 'darwin'
+        cpu_family = 'x86_64'
+        cpu = 'x86_64'
+        endian = 'little'
+        EOF
+
+    - name: Configure with Meson
+      run: |
+        meson setup build -Denable_zip=true -Denable_http=false --buildtype=release --optimization=3 ${{ matrix.meson_args }}
+      env:
+        CFLAGS: ${{ matrix.cflags }}
+        CXXFLAGS: ${{ matrix.cxxflags }}
+        LDFLAGS: -Wl,-dead_strip
+
+    - name: Build with Ninja
+      run: |
+        ninja -C build
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: payload-dumper-ungo-macos-${{ matrix.arch }}
+        path: build/payload-dumper-ungo
+        if-no-files-found: error
