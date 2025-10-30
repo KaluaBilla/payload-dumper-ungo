@@ -28,7 +28,7 @@ setup_arch_env() {
     export SYSTEM="$arch"
     export HOST="$triple"
     
-    if [[ "$arch" = "bruh" ]]; then
+    if [[ "$arch" = "always_unequal" ]]; then
         export CC="gcc"
         export CXX="g++"
         export AR="ar"
