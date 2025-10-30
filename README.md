@@ -15,7 +15,7 @@ An Android OTA payload dumper **not** written in Go.
 - **Direct URL support**: Extract OTA payloads directly from URLs using libcurl
 - **Random access ZIP extraction**: Process ZIP files efficiently without intermediate extraction
 - **Default number of concurrent extraction** = Number of CPU cores
-
+- **Smaller Size**
 ---
 
 # Performance Comparison
