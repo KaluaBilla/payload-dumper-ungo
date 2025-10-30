@@ -1,4 +1,4 @@
-name: Build Payload Dumper
+name: linux test
 
 on:
   pull_request:
