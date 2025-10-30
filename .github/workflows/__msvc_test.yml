@@ -1,4 +1,4 @@
-name: MSVC Build
+name: MSVC test
 
 on:
   pull_request:
