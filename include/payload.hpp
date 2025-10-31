@@ -1,7 +1,5 @@
 #pragma once
-
 #include "update_metadata.pb.h"
-
 #include <fstream>
 #include <mutex>
 #include <string>
@@ -43,7 +41,9 @@ struct PayloadHeader {
 class Payload
 {
   public:
-    explicit Payload(const std::string& filename, const std::string& user_agent = "");
+    explicit Payload(const std::string& filename, 
+                     const std::string& user_agent = "",
+                     bool verify_hash = true);
     ~Payload();
 
     bool open();
@@ -61,6 +61,7 @@ class Payload
   private:
     std::string filename_;
     std::string user_agent_;
+    bool verify_hash_;
     bool is_zip_;
     bool is_http_;
 
@@ -74,9 +75,11 @@ class Payload
     PayloadHeader header_;
     chromeos_update_engine::DeltaArchiveManifest manifest_;
     chromeos_update_engine::Signatures signatures_;
+
     int64_t metadata_size_;
     int64_t data_offset_;
     bool initialized_;
+
     std::mutex file_mutex_;
 
     bool readHeader();
@@ -85,9 +88,7 @@ class Payload
     bool extractPartition(const chromeos_update_engine::PartitionUpdate& partition,
                           const std::string& output_path,
                           ProgressTracker* progress_tracker);
-
     int64_t readBytes(void* buffer, int64_t offset, int64_t length);
-
     static bool isUrl(const std::string& path);
 };
 

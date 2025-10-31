@@ -1,5 +1,6 @@
 #include "payload.hpp"
 #include "progress.hpp"
+#include "sha256.h"
 
 #include <cstdint>
 #if defined(_MSC_VER)
@@ -46,8 +47,9 @@ bool Payload::isUrl(const std::string& path)
            (path.size() >= 8 && path.substr(0, 8) == "https://");
 }
 
-Payload::Payload(const std::string& filename, const std::string& user_agent)
-    : filename_(filename), user_agent_(user_agent), is_zip_(false), is_http_(false)
+Payload::Payload(const std::string& filename, const std::string& user_agent, bool verify_hash)
+    : filename_(filename), user_agent_(user_agent), verify_hash_(verify_hash), is_zip_(false), 
+      is_http_(false)
 #ifdef ENABLE_ZIP
       ,
       zip_io_(nullptr), zip_archive_(nullptr), zip_file_(nullptr)
@@ -260,6 +262,7 @@ bool Payload::init()
 
     std::cout << "Payload version: " << header_.version << "\n";
     std::cout << "Number of partitions: " << manifest_.partitions_size() << "\n";
+    std::cout << "Hash verification: " << (verify_hash_ ? "enabled" : "disabled") << "\n";
 
     initialized_ = true;
     return true;
@@ -285,6 +288,63 @@ uint64_t Payload::getBytesDownloaded() const
     return 0;
 }
 #endif
+
+// SHA-256 streaming hasher class for TeeReader pattern
+class SHA256Hasher {
+public:
+    SHA256Hasher() {
+        sha256_init(&ctx_);
+    }
+
+    void update(const void* data, size_t len) {
+        sha256_update(&ctx_, data, len);
+    }
+
+    void finalize(uint8_t hash[SHA256_DIGEST_SIZE]) {
+        sha256_final(&ctx_, hash);
+    }
+
+    std::string finalizeHex() {
+        uint8_t hash[SHA256_DIGEST_SIZE];
+        sha256_final(&ctx_, hash);
+        
+        char hex[65];
+        sha256_to_hex(hash, hex);
+        return std::string(hex);
+    }
+
+private:
+    SHA256_CTX ctx_;
+};
+
+// TeeReader: reads data and simultaneously feeds it to SHA-256 hasher
+class TeeReader {
+public:
+    TeeReader(const uint8_t* data, size_t size, SHA256Hasher* hasher)
+        : data_(data), size_(size), pos_(0), hasher_(hasher) {}
+
+    size_t read(void* buffer, size_t count) {
+        size_t to_read = std::min(count, size_ - pos_);
+        if (to_read > 0) {
+            memcpy(buffer, data_ + pos_, to_read);
+            if (hasher_) {
+                hasher_->update(data_ + pos_, to_read);
+            }
+            pos_ += to_read;
+        }
+        return to_read;
+    }
+
+    const uint8_t* currentPtr() const { return data_ + pos_; }
+    size_t remaining() const { return size_ - pos_; }
+    void skip(size_t count) { pos_ += std::min(count, size_ - pos_); }
+
+private:
+    const uint8_t* data_;
+    size_t size_;
+    size_t pos_;
+    SHA256Hasher* hasher_;
+};
 
 bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& partition,
                                const std::string& output_path,
@@ -323,11 +383,20 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
             return false;
         }
 
+        // Initialize SHA-256 hasher for verification
+        SHA256Hasher hasher;
+        TeeReader tee_reader(compressed_data.data(), compressed_data.size(), 
+                             verify_hash_ ? &hasher : nullptr);
+
         std::vector<uint8_t> decompressed_data;
 
         switch (operation.type()) {
         case chromeos_update_engine::InstallOperation_Type_REPLACE: {
             decompressed_data = compressed_data;
+            // Update hash with all data
+            if (verify_hash_) {
+                hasher.update(compressed_data.data(), compressed_data.size());
+            }
             break;
         }
 
@@ -345,6 +414,11 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
             strm.next_out = decompressed_data.data();
             strm.avail_out = decompressed_data.size();
 
+            // Hash the compressed data (input)
+            if (verify_hash_) {
+                hasher.update(compressed_data.data(), compressed_data.size());
+            }
+
             ret = lzma_code(&strm, LZMA_FINISH);
             lzma_end(&strm);
             if (ret != LZMA_STREAM_END) {
@@ -357,6 +431,12 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
         case chromeos_update_engine::InstallOperation_Type_REPLACE_BZ: {
             decompressed_data.resize(expected_size);
             unsigned int dest_len = expected_size;
+            
+            // Hash the compressed data (input)
+            if (verify_hash_) {
+                hasher.update(compressed_data.data(), compressed_data.size());
+            }
+
             int ret = BZ2_bzBuffToBuffDecompress(reinterpret_cast<char*>(decompressed_data.data()),
                                                  &dest_len,
                                                  reinterpret_cast<char*>(compressed_data.data()),
@@ -374,6 +454,12 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
             size_t dest_size =
                 ZSTD_getFrameContentSize(compressed_data.data(), compressed_data.size());
             decompressed_data.resize(dest_size);
+            
+            // Hash the compressed data (input)
+            if (verify_hash_) {
+                hasher.update(compressed_data.data(), compressed_data.size());
+            }
+
             size_t ret = ZSTD_decompress(decompressed_data.data(),
                                          decompressed_data.size(),
                                          compressed_data.data(),
@@ -387,6 +473,7 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
 
         case chromeos_update_engine::InstallOperation_Type_ZERO: {
             decompressed_data.resize(expected_size, 0);
+            // No data to hash for ZERO operations
             break;
         }
 
@@ -398,6 +485,33 @@ bool Payload::extractPartition(const chromeos_update_engine::PartitionUpdate& pa
         if (decompressed_data.size() != static_cast<size_t>(expected_size)) {
             std::cerr << "\nSize mismatch for " << name << "\n";
             return false;
+        }
+
+        // Verify SHA-256 hash if enabled and hash is present
+        if (verify_hash_ && operation.has_data_sha256_hash() && 
+            !operation.data_sha256_hash().empty()) {
+            
+            uint8_t calculated_hash[SHA256_DIGEST_SIZE];
+            hasher.finalize(calculated_hash);
+
+            const std::string& expected_hash_bytes = operation.data_sha256_hash();
+            
+            if (expected_hash_bytes.size() == SHA256_DIGEST_SIZE) {
+                if (memcmp(calculated_hash, expected_hash_bytes.data(), SHA256_DIGEST_SIZE) != 0) {
+                    // Convert hashes to hex for error message
+                    char calculated_hex[65];
+                    sha256_to_hex(calculated_hash, calculated_hex);
+                    
+                    char expected_hex[65];
+                    sha256_to_hex(reinterpret_cast<const uint8_t*>(expected_hash_bytes.data()), 
+                                  expected_hex);
+                    
+                    std::cerr << "\n✗ Hash verification failed for " << name << "\n";
+                    std::cerr << "  Expected: " << expected_hex << "\n";
+                    std::cerr << "  Got:      " << calculated_hex << "\n";
+                    return false;
+                }
+            }
         }
 
         output.write(reinterpret_cast<char*>(decompressed_data.data()), decompressed_data.size());

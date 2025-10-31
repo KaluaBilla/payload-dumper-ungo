@@ -18,6 +18,7 @@ struct Options {
     std::string user_agent;
     int concurrency = 0;
     bool list_only = false;
+    bool verify_hash = true;  // Enable verification by default
 };
 
 void printUsage(const char* program_name)
@@ -28,10 +29,11 @@ void printUsage(const char* program_name)
               << "  -o, --output DIR        Output directory\n"
               << "  -p, --partitions LIST   Extract only specified partitions (comma-separated)\n"
               << "  -c, --concurrency N     Number of extraction threads\n"
+              << "  --no-verify             Disable SHA-256 hash verification\n"
 #ifdef HTTP_SUPPORT
               << "  -u, --user-agent STR    Custom User-Agent for HTTP requests\n"
 #endif
-              << "  -h, --help              Show this help message\n\n";
+              << "\n";
 }
 
 bool parseArguments(int argc, char* argv[], Options& opts)
@@ -44,6 +46,8 @@ bool parseArguments(int argc, char* argv[], Options& opts)
             return false;
         } else if (arg == "-l" || arg == "--list") {
             opts.list_only = true;
+        } else if (arg == "--no-verify") {
+            opts.verify_hash = false;
         } else if (arg == "-o" || arg == "--output") {
             if (i + 1 >= argc) {
                 std::cerr << "Error: " << arg << " requires an argument\n";
@@ -133,7 +137,7 @@ int main(int argc, char* argv[])
         std::cout << "Source: " << opts.input_file << "\n";
     }
 
-    payload_dumper::Payload payload(opts.input_file, opts.user_agent);
+    payload_dumper::Payload payload(opts.input_file, opts.user_agent, opts.verify_hash);
 
     if (!payload.open()) {
         std::cerr << "Failed to open payload\n";
@@ -180,7 +184,7 @@ int main(int argc, char* argv[])
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time);
 
     if (!success) {
-        std::cerr << "\nExtraction failed\n";
+        std::cerr << "\n✗ Extraction failed\n";
         return 1;
     }
 
