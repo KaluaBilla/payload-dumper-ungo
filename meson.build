@@ -39,18 +39,18 @@ if not zstd_dep.found()
   zstd_dep = dependency('libzstd', fallback: ['zstd', 'libzstd_dep'], default_options: ['default_library=static'])
 endif
 
-bz2_dep = dependency('bzip2', required: false)
+bz2_dep = dependency('bz2', required: false)
 if not bz2_dep.found()
-  bz2_dep = dependency('bz2', required: false)
+  bz2_dep = dependency('bzip2', required: false)
 endif
 if not bz2_dep.found()
   bz2_dep = dependency('bz2', fallback: ['bzip2', 'bzip2_dep'], default_options: ['default_library=static'])
 endif
 
 
-protobuf_dep = dependency('libprotobuf', required: false)
+protobuf_dep = dependency('protobuf', required: false)
 if not protobuf_dep.found()
-  protobuf_dep = dependency('protobuf', fallback: ['protobuf', 'protobuf_dep'], default_options: ['default_library=static'])
+  protobuf_dep = dependency('libprotobuf', fallback: ['protobuf', 'protobuf_dep'], default_options: ['default_library=static'])
 endif
 
 # --- Optional HTTP ---
