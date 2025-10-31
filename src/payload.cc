@@ -1,3 +1,4 @@
+#define NOMINMAX
 #include "payload.hpp"
 #include "progress.hpp"
 #include "sha256.h"
